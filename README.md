@@ -1,2 +1,3 @@
 # libduallnet
-Rust library which provides network features for the Duall ERP.
+
+Rust library which provides network features for Duall ERP.
