@@ -7,6 +7,9 @@ edition = "2018"
 [lib]
 crate-type = ["cdylib", "staticlib"]
 
+[profile.release]
+lto = true
+
 [dependencies]
 libc = "0.2.66"
 serde_plain = "0.3.0"
