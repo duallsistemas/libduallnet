@@ -22,8 +22,8 @@ pub unsafe extern "C" fn dn_version() -> *const c_char {
 ///
 /// * `0` - Success.
 /// * `-1` - Invalid argument.
-/// * `-2` - Could not lookup address.
-/// * `-3` - Address not found.
+/// * `-2` - No address found.
+/// * `-3` - Unknown error.
 #[no_mangle]
 pub unsafe extern "C" fn dn_lookup_host(
     hostname: *const c_char,
@@ -48,10 +48,10 @@ pub unsafe extern "C" fn dn_lookup_host(
                 copy!(buf.as_ptr(), ip, size);
                 return 0;
             }
+            return -2;
         }
-        Err(_) => return -2,
+        Err(_) => return -3,
     }
-    -3
 }
 
 #[cfg(test)]
@@ -74,7 +74,7 @@ mod tests {
             );
             assert_eq!(
                 dn_lookup_host(
-                    sc!("abc123").unwrap().as_ptr(),
+                    sc!("::1").unwrap().as_ptr(),
                     true,
                     ip.as_ptr() as *mut c_char,
                     ip.len()
@@ -83,8 +83,8 @@ mod tests {
             );
             assert_eq!(
                 dn_lookup_host(
-                    sc!("::1").unwrap().as_ptr(),
-                    true,
+                    sc!("abc123").unwrap().as_ptr(),
+                    false,
                     ip.as_ptr() as *mut c_char,
                     ip.len()
                 ),
