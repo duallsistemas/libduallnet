@@ -1,6 +1,6 @@
 [package]
 name = "duallnet"
-version = "1.0.1"
+version = "1.1.0"
 authors = ["silvioprog <silvioprog@gmail.com>"]
 edition = "2018"
 
@@ -14,3 +14,4 @@ lto = true
 libc = "0.2.66"
 serde_plain = "0.3.0"
 dns-lookup = "1.0.1"
+mac_address = "1.0.2"

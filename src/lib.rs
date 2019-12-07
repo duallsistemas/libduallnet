@@ -1,4 +1,5 @@
 use libc::{c_char, c_int, size_t};
+use mac_address::get_mac_address;
 use serde_plain;
 
 mod utils;
@@ -50,6 +51,39 @@ pub unsafe extern "C" fn dn_lookup_host(
             }
             return -2;
         }
+        Err(_) => return -3,
+    }
+}
+
+/// Retrieves the MAC address of the first active network device.
+///
+/// # Arguments
+///
+/// * `[in,out] mac_addr` - MAC address as C-like string.
+/// * `[in] size` - Size of the `mac_addr` string.
+///
+/// # Returns
+///
+/// * `0` - Success.
+/// * `-1` - Invalid argument.
+/// * `-2` - No MAC address found.
+/// * `-3` - Unknown error.
+#[no_mangle]
+pub unsafe extern "C" fn dn_mac_address(mac_addr: *mut c_char, mut size: size_t) -> c_int {
+    if mac_addr.is_null() || size <= 0 {
+        return -1;
+    }
+    match get_mac_address() {
+        Ok(Some(ma)) => {
+            let addr = sc!(format!("{}", ma)).unwrap();
+            let buf = addr.to_bytes_with_nul();
+            if size > buf.len() {
+                size = buf.len()
+            }
+            copy!(buf.as_ptr(), mac_addr, size);
+            return 0;
+        }
+        Ok(None) => return -2,
         Err(_) => return -3,
     }
 }
@@ -112,6 +146,23 @@ mod tests {
             let len = len!(ip.as_ptr());
             assert_eq!(len, 3);
             assert_eq!(cmp!(ip.as_ptr(), sc!("::1").unwrap().as_ptr(), len + 1), 0);
+        }
+    }
+
+    #[test]
+    fn mac_address() {
+        unsafe {
+            let mac_addr: [c_char; 18] = [0; 18];
+            assert_eq!(dn_mac_address(std::ptr::null_mut(), mac_addr.len()), -1);
+
+            dn_mac_address(mac_addr.as_ptr() as *mut c_char, mac_addr.len());
+            let len = len!(mac_addr.as_ptr());
+            assert_eq!(len, 17);
+            let mac = format!("{}", get_mac_address().unwrap().unwrap());
+            assert_eq!(
+                cmp!(mac_addr.as_ptr(), sc!(mac).unwrap().as_ptr(), len + 1),
+                0
+            );
         }
     }
 }
