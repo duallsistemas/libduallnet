@@ -110,6 +110,24 @@ mod tests {
                 dn_lookup_host(
                     sc!("::1").unwrap().as_ptr(),
                     true,
+                    std::ptr::null_mut(),
+                    ip.len()
+                ),
+                -1
+            );
+            assert_eq!(
+                dn_lookup_host(
+                    sc!("::1").unwrap().as_ptr(),
+                    true,
+                    ip.as_ptr() as *mut c_char,
+                    0
+                ),
+                -1
+            );
+            assert_eq!(
+                dn_lookup_host(
+                    sc!("::1").unwrap().as_ptr(),
+                    true,
                     ip.as_ptr() as *mut c_char,
                     ip.len()
                 ),
@@ -154,6 +172,7 @@ mod tests {
         unsafe {
             let mac_addr: [c_char; 18] = [0; 18];
             assert_eq!(dn_mac_address(std::ptr::null_mut(), mac_addr.len()), -1);
+            assert_eq!(dn_mac_address(mac_addr.as_ptr() as *mut c_char, 0), -1);
 
             dn_mac_address(mac_addr.as_ptr() as *mut c_char, mac_addr.len());
             let len = len!(mac_addr.as_ptr());
