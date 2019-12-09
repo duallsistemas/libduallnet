@@ -1,6 +1,7 @@
-use libc::{c_char, c_int, size_t};
+use libc::{c_char, c_int, c_uint, size_t};
 use mac_address::get_mac_address;
 use serde_plain;
+use sntpc;
 
 mod utils;
 
@@ -85,6 +86,38 @@ pub unsafe extern "C" fn dn_mac_address(mac_addr: *mut c_char, mut size: size_t)
         }
         Ok(None) => return -2,
         Err(_) => return -3,
+    }
+}
+
+/// Requests timestamp from a given NTP server.
+///
+/// # Arguments
+///
+/// * `[in] pool` - Server's name or IP address as C-like string.
+/// * `[in] port` - Server's port.
+/// * `[in,out] size` - Returned timestamp.
+///
+/// # Returns
+///
+/// * `0` - Success.
+/// * `-1` - Invalid argument.
+/// * `-2` - NTP error.
+#[no_mangle]
+pub unsafe extern "C" fn dn_ntp_request(
+    pool: *const c_char,
+    port: c_uint,
+    timestamp: *mut c_uint,
+) -> c_int {
+    if pool.is_null() || port <= 0 || timestamp.is_null() {
+        return -1;
+    }
+    let result = sntpc::request(cs!(pool).unwrap(), port);
+    match result {
+        Ok(time) => {
+            *timestamp = time;
+            return 0;
+        }
+        Err(_) => return -2,
     }
 }
 
@@ -180,6 +213,26 @@ mod tests {
             let mac = format!("{}", get_mac_address().unwrap().unwrap());
             assert_eq!(
                 cmp!(mac_addr.as_ptr(), sc!(mac).unwrap().as_ptr(), len + 1),
+                0
+            );
+        }
+    }
+
+    #[test]
+    fn ntp_request() {
+        unsafe {
+            let pool = sc!("pool.ntp.org").unwrap().as_ptr();
+            let mut timestamp: c_uint = 0;
+            assert_eq!(
+                dn_ntp_request(std::ptr::null_mut(), 123, &mut timestamp),
+                -1
+            );
+            assert_eq!(dn_ntp_request(pool, 0, &mut timestamp), -1);
+            assert_eq!(dn_ntp_request(pool, 123, std::ptr::null_mut()), -1);
+            assert_eq!(dn_ntp_request(pool, 321, &mut timestamp), -2);
+
+            assert_eq!(
+                dn_ntp_request(sc!("pool.ntp.org").unwrap().as_ptr(), 123, &mut timestamp),
                 0
             );
         }
