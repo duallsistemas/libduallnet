@@ -39,7 +39,7 @@ type
 
   TdNet = packed record
   public const
-    LIB_NAME = libduallnet.LIB_NAME;
+    LIB_NAME = libduallnet.DN_LIB_NAME;
   public
     class procedure Load(const ALibraryName: TFileName = LIB_NAME); static;
     class procedure Unload; static;

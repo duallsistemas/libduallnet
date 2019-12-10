@@ -40,7 +40,7 @@ const
     'so'
  {$ENDIF};
 {$ENDIF}
-  LIB_NAME = Concat(SharedPrefix, 'duallnet.', SharedSuffix);
+  DN_LIB_NAME = Concat(SharedPrefix, 'duallnet.', SharedSuffix);
 
 {$IFDEF FPC}
  {$IFDEF VER3_0}
@@ -57,9 +57,9 @@ type
 {$ENDIF}
 
 resourcestring
-  SLibEmptyName = 'Empty library name.';
-  SLibNotLoaded = 'Library ''%s'' not loaded.';
-  SLibInvalid = 'Invalid library ''%s''.';
+  SdnLibEmptyName = 'Empty library name.';
+  SdnLibNotLoaded = 'Library ''%s'' not loaded.';
+  SdnLibInvalid = 'Invalid library ''%s''.';
 
 type
   Pcvoid = Pointer;
@@ -69,7 +69,7 @@ type
   Pcint = ^Int32;
   csize_t = NativeUInt;
 
-  ELibNotLoaded = class(EFileNotFoundException);
+  EdnLibNotLoaded = class(EFileNotFoundException);
 
 var
   dn_version: function: Pcchar; cdecl;
@@ -100,15 +100,15 @@ begin
   GCS.Acquire;
   try
     if ALibraryName = '' then
-      raise EArgumentException.Create(SLibEmptyName);
+      raise EArgumentException.Create(SdnLibEmptyName);
     GLibHandle := SafeLoadLibrary(ALibraryName);
     if GLibHandle = NilHandle then
     begin
 {$IFDEF MSWINDOWS}
       if GetLastError = ERROR_BAD_EXE_FORMAT then
-        raise ELibNotLoaded.CreateFmt(SLibInvalid, [ALibraryName]);
+        raise EdnLibNotLoaded.CreateFmt(SdnLibInvalid, [ALibraryName]);
 {$ENDIF}
-      raise ELibNotLoaded.CreateFmt(SLibNotLoaded, [ALibraryName])
+      raise EdnLibNotLoaded.CreateFmt(SdnLibNotLoaded, [ALibraryName])
     end;
     GLibLastName := ALibraryName;
 
@@ -144,8 +144,8 @@ end;
 procedure Check;
 begin
   if GLibHandle = NilHandle then
-    raise ELibNotLoaded.CreateFmt(SLibNotLoaded,
-      [IfThen(GLibLastName = '', LIB_NAME, GLibLastName)]);
+    raise EdnLibNotLoaded.CreateFmt(SdnLibNotLoaded,
+      [IfThen(GLibLastName = '', DN_LIB_NAME, GLibLastName)]);
 end;
 
 initialization
