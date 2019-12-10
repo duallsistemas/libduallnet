@@ -31,7 +31,7 @@ pub unsafe extern "C" fn dn_lookup_host(
     hostname: *const c_char,
     prefer_ipv4: bool,
     ip: *mut c_char,
-    mut size: size_t,
+    size: size_t,
 ) -> c_int {
     if hostname.is_null() || ip.is_null() || size <= 0 {
         return -1;
@@ -44,10 +44,11 @@ pub unsafe extern "C" fn dn_lookup_host(
                 }
                 let addr = sc!(to_string!(item).unwrap()).unwrap();
                 let buf = addr.to_bytes_with_nul();
-                if size > buf.len() {
-                    size = buf.len()
+                let mut buf_size = size;
+                if buf_size > buf.len() {
+                    buf_size = buf.len()
                 }
-                copy!(buf.as_ptr(), ip, size);
+                copy!(buf.as_ptr(), ip, buf_size);
                 return 0;
             }
             return -2;
@@ -70,7 +71,7 @@ pub unsafe extern "C" fn dn_lookup_host(
 /// * `-2` - No MAC address found.
 /// * `-3` - Unknown error.
 #[no_mangle]
-pub unsafe extern "C" fn dn_mac_address(mac_addr: *mut c_char, mut size: size_t) -> c_int {
+pub unsafe extern "C" fn dn_mac_address(mac_addr: *mut c_char, size: size_t) -> c_int {
     if mac_addr.is_null() || size <= 0 {
         return -1;
     }
@@ -78,10 +79,11 @@ pub unsafe extern "C" fn dn_mac_address(mac_addr: *mut c_char, mut size: size_t)
         Ok(Some(ma)) => {
             let addr = sc!(format!("{}", ma)).unwrap();
             let buf = addr.to_bytes_with_nul();
-            if size > buf.len() {
-                size = buf.len()
+            let mut buf_size = size;
+            if buf_size > buf.len() {
+                buf_size = buf.len()
             }
-            copy!(buf.as_ptr(), mac_addr, size);
+            copy!(buf.as_ptr(), mac_addr, buf_size);
             return 0;
         }
         Ok(None) => return -2,
