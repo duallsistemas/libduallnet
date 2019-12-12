@@ -14,26 +14,26 @@ uses
 
 procedure TestVersion;
 begin
-  Assert(Length(TdNet.Version) >= 5);
+  Assert(Length(dNet.Version) >= 5);
 end;
 
 procedure TestMACAddress;
 begin
-  Assert(Length(TdNet.MACAddress) = 17);
+  Assert(Length(dNet.MACAddress) = 17);
 end;
 
 procedure TestLookupHost;
 begin
-  Assert(TdNet.LookupHost('localhost') = '127.0.0.1');
+  Assert(dNet.LookupHost('localhost') = '127.0.0.1');
 end;
 
 procedure TestNtpRequest;
 begin
-  Assert(TdNet.NtpRequest > 0);
+  Assert(dNet.NtpRequest > 0);
 end;
 
 begin
-  TdNet.Load(Concat('../../target/release/', TdNet.LIB_NAME));
+  dNet.Load(Concat('../../target/release/', dNet.LIB_NAME));
   TestVersion;
   TestMACAddress;
   TestLookupHost;

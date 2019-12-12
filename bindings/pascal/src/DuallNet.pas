@@ -35,9 +35,9 @@ type
 
   EdNet = class(EInvalidOpException);
 
-  { TdNet }
+  { dNet }
 
-  TdNet = packed record
+  dNet = packed record
   public const
     LIB_NAME = libduallnet.DN_LIB_NAME;
   public
@@ -63,26 +63,26 @@ begin
   raise EdNet.Create(SUnknownLibraryError);
 end;
 
-{ TdNet }
+{ dNet }
 
-class procedure TdNet.Load(const ALibraryName: TFileName);
+class procedure dNet.Load(const ALibraryName: TFileName);
 begin
   Unload;
   libduallnet.Load(ALibraryName);
 end;
 
-class procedure TdNet.Unload;
+class procedure dNet.Unload;
 begin
   libduallnet.Unload;
 end;
 
-class function TdNet.Version: string;
+class function dNet.Version: string;
 begin
   libduallnet.Check;
   Result := TMarshal.ToString(libduallnet.dn_version);
 end;
 
-class function TdNet.MACAddress: string;
+class function dNet.MACAddress: string;
 var
   A: array[0..MAC_ADDR_SIZE] of cchar;
   R: cint;
@@ -97,7 +97,7 @@ begin
   Result := TMarshal.ToString(@A[0]);
 end;
 
-class function TdNet.LookupHost(const AHostName: string;
+class function dNet.LookupHost(const AHostName: string;
   APreferIPv4: Boolean): string;
 var
   M: TMarshaller;
@@ -116,7 +116,7 @@ begin
   Result := TMarshal.ToString(@A[0]);
 end;
 
-class function TdNet.NtpRequest(const APool: string; APort: Word): TDateTime;
+class function dNet.NtpRequest(const APool: string; APort: Word): TDateTime;
 var
   M: TMarshaller;
   R, TS: cint;
@@ -138,6 +138,6 @@ end;
 initialization
 
 finalization
-  TdNet.Unload;
+  dNet.Unload;
 
 end.
