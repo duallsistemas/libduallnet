@@ -36,13 +36,13 @@ pub unsafe extern "C" fn dn_lookup_host(
     if hostname.is_null() || ip.is_null() || size <= 0 {
         return -1;
     }
-    match dns_lookup::lookup_host(cs!(hostname).unwrap()) {
+    match dns_lookup::lookup_host(from_c_str!(hostname).unwrap()) {
         Ok(ips) => {
             for item in ips {
                 if prefer_ipv4 && !item.is_ipv4() {
                     continue;
                 }
-                let addr = sc!(to_string!(item).unwrap()).unwrap();
+                let addr = to_c_str!(to_string!(item).unwrap()).unwrap();
                 let buf = addr.to_bytes_with_nul();
                 let mut buf_size = size;
                 if buf_size > buf.len() {
@@ -51,9 +51,9 @@ pub unsafe extern "C" fn dn_lookup_host(
                 copy!(buf.as_ptr(), ip, buf_size);
                 return 0;
             }
-            return -2;
+            -2
         }
-        Err(_) => return -3,
+        Err(_) => -3,
     }
 }
 
@@ -77,17 +77,17 @@ pub unsafe extern "C" fn dn_mac_address(mac_addr: *mut c_char, size: size_t) -> 
     }
     match get_mac_address() {
         Ok(Some(ma)) => {
-            let addr = sc!(format!("{}", ma)).unwrap();
+            let addr = to_c_str!(format!("{}", ma)).unwrap();
             let buf = addr.to_bytes_with_nul();
             let mut buf_size = size;
             if buf_size > buf.len() {
                 buf_size = buf.len()
             }
             copy!(buf.as_ptr(), mac_addr, buf_size);
-            return 0;
+            0
         }
-        Ok(None) => return -2,
-        Err(_) => return -3,
+        Ok(None) => -2,
+        Err(_) => -3,
     }
 }
 
@@ -113,13 +113,13 @@ pub unsafe extern "C" fn dn_ntp_request(
     if pool.is_null() || port <= 0 || timestamp.is_null() {
         return -1;
     }
-    let result = sntpc::request(cs!(pool).unwrap(), port);
+    let result = sntpc::request(from_c_str!(pool).unwrap(), port);
     match result {
         Ok(time) => {
             *timestamp = time;
-            return 0;
+            0
         }
-        Err(_) => return -2,
+        Err(_) => -2,
     }
 }
 
@@ -129,7 +129,10 @@ mod tests {
     #[test]
     fn version() {
         unsafe {
-            assert_eq!(cs!(dn_version()).unwrap(), env!("CARGO_PKG_VERSION"));
+            assert_eq!(
+                from_c_str!(dn_version()).unwrap(),
+                env!("CARGO_PKG_VERSION")
+            );
         }
     }
 
@@ -143,7 +146,7 @@ mod tests {
             );
             assert_eq!(
                 dn_lookup_host(
-                    sc!("::1").unwrap().as_ptr(),
+                    to_c_str!("::1").unwrap().as_ptr(),
                     true,
                     std::ptr::null_mut(),
                     ip.len()
@@ -152,7 +155,7 @@ mod tests {
             );
             assert_eq!(
                 dn_lookup_host(
-                    sc!("::1").unwrap().as_ptr(),
+                    to_c_str!("::1").unwrap().as_ptr(),
                     true,
                     ip.as_ptr() as *mut c_char,
                     0
@@ -161,7 +164,7 @@ mod tests {
             );
             assert_eq!(
                 dn_lookup_host(
-                    sc!("::1").unwrap().as_ptr(),
+                    to_c_str!("::1").unwrap().as_ptr(),
                     true,
                     ip.as_ptr() as *mut c_char,
                     ip.len()
@@ -170,7 +173,7 @@ mod tests {
             );
             assert_eq!(
                 dn_lookup_host(
-                    sc!("abc123").unwrap().as_ptr(),
+                    to_c_str!("abc123").unwrap().as_ptr(),
                     false,
                     ip.as_ptr() as *mut c_char,
                     ip.len()
@@ -179,26 +182,33 @@ mod tests {
             );
 
             dn_lookup_host(
-                sc!("localhost").unwrap().as_ptr(),
+                to_c_str!("localhost").unwrap().as_ptr(),
                 true,
                 ip.as_ptr() as *mut c_char,
                 ip.len(),
             );
-            let len = len!(ip.as_ptr());
+            let len = length!(ip.as_ptr());
             assert_eq!(len, 9);
             assert_eq!(
-                cmp!(ip.as_ptr(), sc!("127.0.0.1").unwrap().as_ptr(), len + 1),
+                compare!(
+                    ip.as_ptr(),
+                    to_c_str!("127.0.0.1").unwrap().as_ptr(),
+                    len + 1
+                ),
                 0
             );
             dn_lookup_host(
-                sc!("localhost").unwrap().as_ptr(),
+                to_c_str!("localhost").unwrap().as_ptr(),
                 false,
                 ip.as_ptr() as *mut c_char,
                 ip.len(),
             );
-            let len = len!(ip.as_ptr());
+            let len = length!(ip.as_ptr());
             assert_eq!(len, 3);
-            assert_eq!(cmp!(ip.as_ptr(), sc!("::1").unwrap().as_ptr(), len + 1), 0);
+            assert_eq!(
+                compare!(ip.as_ptr(), to_c_str!("::1").unwrap().as_ptr(), len + 1),
+                0
+            );
         }
     }
 
@@ -210,11 +220,11 @@ mod tests {
             assert_eq!(dn_mac_address(mac_addr.as_ptr() as *mut c_char, 0), -1);
 
             dn_mac_address(mac_addr.as_ptr() as *mut c_char, mac_addr.len());
-            let len = len!(mac_addr.as_ptr());
+            let len = length!(mac_addr.as_ptr());
             assert_eq!(len, 17);
             let mac = format!("{}", get_mac_address().unwrap().unwrap());
             assert_eq!(
-                cmp!(mac_addr.as_ptr(), sc!(mac).unwrap().as_ptr(), len + 1),
+                compare!(mac_addr.as_ptr(), to_c_str!(mac).unwrap().as_ptr(), len + 1),
                 0
             );
         }
@@ -223,7 +233,7 @@ mod tests {
     #[test]
     fn ntp_request() {
         unsafe {
-            let pool = sc!("pool.ntp.org").unwrap().as_ptr();
+            let pool = to_c_str!("pool.ntp.org").unwrap().as_ptr();
             let mut timestamp: c_uint = 0;
             assert_eq!(
                 dn_ntp_request(std::ptr::null_mut(), 123, &mut timestamp),
@@ -234,7 +244,11 @@ mod tests {
             assert_eq!(dn_ntp_request(pool, 321, &mut timestamp), -2);
 
             assert_eq!(
-                dn_ntp_request(sc!("pool.ntp.org").unwrap().as_ptr(), 123, &mut timestamp),
+                dn_ntp_request(
+                    to_c_str!("pool.ntp.org").unwrap().as_ptr(),
+                    123,
+                    &mut timestamp
+                ),
                 0
             );
         }
