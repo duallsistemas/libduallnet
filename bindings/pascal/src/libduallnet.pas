@@ -103,6 +103,8 @@ begin
     raise EArgumentException.Create(SdnLibEmptyName);
   GCS.Acquire;
   try
+    if GLibHandle <> NilHandle then
+      FreeLibrary(GLibHandle);
     GLibHandle := SafeLoadLibrary(ALibraryName);
     if GLibHandle = NilHandle then
       Exit(False);
@@ -133,13 +135,10 @@ procedure Unload;
 begin
   GCS.Acquire;
   try
-    if GLibHandle = NilHandle then
-      Exit;
-    if not FreeLibrary(GLibHandle) then
+    if (GLibHandle = NilHandle) or (not FreeLibrary(GLibHandle)) then
       Exit;
     GLibHandle := NilHandle;
     GLibLastName := '';
-
     dn_version := nil;
     dn_mac_address := nil;
     dn_lookup_host := nil;
