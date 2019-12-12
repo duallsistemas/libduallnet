@@ -82,6 +82,8 @@ var
   dn_ntp_request: function(const pool: Pcchar; port: cint;
     timestamp: Pcint): cint; cdecl;
 
+function TryLoad(const ALibraryName: TFileName): Boolean;
+
 procedure Load(const ALibraryName: TFileName);
 
 procedure Unload;
@@ -95,29 +97,35 @@ var
   GLibHandle: TLibHandle = NilHandle;
   GLibLastName: TFileName = '';
 
-procedure Load(const ALibraryName: TFileName);
+function TryLoad(const ALibraryName: TFileName): Boolean;
 begin
+  if ALibraryName = '' then
+    raise EArgumentException.Create(SdnLibEmptyName);
   GCS.Acquire;
   try
-    if ALibraryName = '' then
-      raise EArgumentException.Create(SdnLibEmptyName);
     GLibHandle := SafeLoadLibrary(ALibraryName);
     if GLibHandle = NilHandle then
-    begin
-{$IFDEF MSWINDOWS}
-      if GetLastError = ERROR_BAD_EXE_FORMAT then
-        raise EdnLibNotLoaded.CreateFmt(SdnLibInvalid, [ALibraryName]);
-{$ENDIF}
-      raise EdnLibNotLoaded.CreateFmt(SdnLibNotLoaded, [ALibraryName])
-    end;
+      Exit(False);
     GLibLastName := ALibraryName;
-
     dn_version := GetProcAddress(GLibHandle, 'dn_version');
     dn_mac_address := GetProcAddress(GLibHandle, 'dn_mac_address');
     dn_lookup_host := GetProcAddress(GLibHandle, 'dn_lookup_host');
     dn_ntp_request := GetProcAddress(GLibHandle, 'dn_ntp_request');
+    Result := True;
   finally
     GCS.Release;
+  end;
+end;
+
+procedure Load(const ALibraryName: TFileName);
+begin
+  if not TryLoad(ALibraryName) then
+  begin
+{$IFDEF MSWINDOWS}
+    if GetLastError = ERROR_BAD_EXE_FORMAT then
+      raise EdnLibNotLoaded.CreateFmt(SdnLibInvalid, [ALibraryName]);
+{$ENDIF}
+    raise EdnLibNotLoaded.CreateFmt(SdnLibNotLoaded, [ALibraryName])
   end;
 end;
 
@@ -150,6 +158,7 @@ end;
 
 initialization
   GCS := TCriticalSection.Create;
+  TryLoad(DN_LIB_NAME);
 
 finalization
   FreeAndNil(GCS);
