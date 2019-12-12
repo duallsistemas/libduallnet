@@ -160,6 +160,7 @@ initialization
   TryLoad(DN_LIB_NAME);
 
 finalization
+  Unload;
   FreeAndNil(GCS);
 
 end.

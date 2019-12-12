@@ -135,9 +135,4 @@ begin
 {$ENDIF}(UnixToDateTime(TS));
 end;
 
-initialization
-
-finalization
-  dNet.Unload;
-
 end.
