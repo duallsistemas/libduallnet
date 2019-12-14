@@ -1,7 +1,7 @@
 use libc::{c_char, c_int, c_uint, size_t};
 use mac_address::get_mac_address;
-use serde_plain;
 use sntpc;
+use std::net::ToSocketAddrs;
 
 mod utils;
 
@@ -36,19 +36,19 @@ pub unsafe extern "C" fn dn_lookup_host(
     if hostname.is_null() || ip.is_null() || size <= 0 {
         return -1;
     }
-    match dns_lookup::lookup_host(from_c_str!(hostname).unwrap()) {
-        Ok(ips) => {
-            for item in ips {
-                if prefer_ipv4 && !item.is_ipv4() {
+    match vec![from_c_str!(hostname).unwrap(), "0"]
+        .join(":")
+        .to_socket_addrs()
+    {
+        Ok(addrs) => {
+            for addr in addrs {
+                if prefer_ipv4 && !addr.is_ipv4() {
                     continue;
                 }
-                let addr = to_c_str!(to_string!(item).unwrap()).unwrap();
-                let buf = addr.to_bytes_with_nul();
-                let mut buf_size = size;
-                if buf_size > buf.len() {
-                    buf_size = buf.len()
-                }
-                copy!(buf.as_ptr(), ip, buf_size);
+                let mut resolved_ip = addr.to_string();
+                resolved_ip.truncate(resolved_ip.len() - ":0".len());
+                let dest_ip = to_c_str!(resolved_ip).unwrap();
+                copy_c_str!(dest_ip, ip, size);
                 return 0;
             }
             -2
@@ -77,13 +77,8 @@ pub unsafe extern "C" fn dn_mac_address(mac_addr: *mut c_char, size: size_t) -> 
     }
     match get_mac_address() {
         Ok(Some(ma)) => {
-            let addr = to_c_str!(format!("{}", ma)).unwrap();
-            let buf = addr.to_bytes_with_nul();
-            let mut buf_size = size;
-            if buf_size > buf.len() {
-                buf_size = buf.len()
-            }
-            copy!(buf.as_ptr(), mac_addr, buf_size);
+            let addr = to_c_str!(ma.to_string()).unwrap();
+            copy_c_str!(addr, mac_addr, size);
             0
         }
         Ok(None) => -2,
@@ -181,11 +176,14 @@ mod tests {
                 -3
             );
 
-            dn_lookup_host(
-                to_c_str!("localhost").unwrap().as_ptr(),
-                true,
-                ip.as_ptr() as *mut c_char,
-                ip.len(),
+            assert_eq!(
+                dn_lookup_host(
+                    to_c_str!("localhost").unwrap().as_ptr(),
+                    true,
+                    ip.as_ptr() as *mut c_char,
+                    ip.len(),
+                ),
+                0
             );
             let len = length!(ip.as_ptr());
             assert_eq!(len, 9);
@@ -197,16 +195,19 @@ mod tests {
                 ),
                 0
             );
-            dn_lookup_host(
-                to_c_str!("localhost").unwrap().as_ptr(),
-                false,
-                ip.as_ptr() as *mut c_char,
-                ip.len(),
+            assert_eq!(
+                dn_lookup_host(
+                    to_c_str!("localhost").unwrap().as_ptr(),
+                    false,
+                    ip.as_ptr() as *mut c_char,
+                    ip.len(),
+                ),
+                0
             );
             let len = length!(ip.as_ptr());
-            assert_eq!(len, 3);
+            assert_eq!(len, 5);
             assert_eq!(
-                compare!(ip.as_ptr(), to_c_str!("::1").unwrap().as_ptr(), len + 1),
+                compare!(ip.as_ptr(), to_c_str!("[::1]").unwrap().as_ptr(), len + 1),
                 0
             );
         }
