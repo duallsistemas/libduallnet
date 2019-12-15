@@ -1,7 +1,9 @@
 use libc::{c_char, c_int, c_uint, size_t};
 use mac_address::get_mac_address;
 use sntpc;
-use std::net::ToSocketAddrs;
+use std::io::ErrorKind::TimedOut;
+use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
+use std::time::Duration;
 
 mod utils;
 
@@ -54,6 +56,39 @@ pub unsafe extern "C" fn dn_lookup_host(
             -2
         }
         Err(_) => -3,
+    }
+}
+
+/// Checks a TCP connection to a remote host with a timeout.
+///
+/// # Arguments
+///
+/// * `[in] ip` - IP address as C-like string.
+/// * `[in] port` - Connection port.
+/// * `[in] timeout` - Connection timeout in milliseconds.
+///
+/// # Returns
+///
+/// * `0` - Success.
+/// * `-1` - Invalid argument.
+/// * `-2` - Connection timed out.
+/// * `-3` - Unknown error.
+#[no_mangle]
+pub unsafe extern "C" fn dn_connection_health(ip: *const c_char, port: u16, timeout: u64) -> c_int {
+    if ip.is_null() || port <= 0 {
+        return -1;
+    }
+    match format!("{}:{}", from_c_str!(ip).unwrap(), port).parse::<SocketAddr>() {
+        Ok(addr) => match TcpStream::connect_timeout(&addr, Duration::from_millis(timeout)) {
+            Ok(_) => 0,
+            Err(e) => {
+                if e.kind() == TimedOut {
+                    return -2;
+                }
+                -3
+            }
+        },
+        Err(_) => -1,
     }
 }
 
@@ -208,6 +243,21 @@ mod tests {
             assert_eq!(len, 5);
             assert_eq!(
                 compare!(ip.as_ptr(), to_c_str!("[::1]").unwrap().as_ptr(), len + 1),
+                0
+            );
+        }
+    }
+
+    #[test]
+    fn connection_health() {
+        unsafe {
+            assert_eq!(dn_connection_health(std::ptr::null_mut(), 123, 3000), -1);
+            assert_eq!(
+                dn_connection_health(to_c_str!("127.0.0.1").unwrap().as_ptr(), 0, 3000),
+                -1
+            );
+            assert_eq!(
+                dn_connection_health(to_c_str!("54.94.220.237").unwrap().as_ptr(), 443, 3000),
                 0
             );
         }
