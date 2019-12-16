@@ -72,7 +72,8 @@ pub unsafe extern "C" fn dn_lookup_host(
 /// * `0` - Success.
 /// * `-1` - Invalid argument.
 /// * `-2` - Connection timed out.
-/// * `-3` - Unknown error.
+/// * `-3` - Could not connect.
+/// * `-4` - Unknown error.
 #[no_mangle]
 pub unsafe extern "C" fn dn_connection_health(ip: *const c_char, port: u16, timeout: u64) -> c_int {
     if ip.is_null() || port <= 0 {
@@ -88,7 +89,7 @@ pub unsafe extern "C" fn dn_connection_health(ip: *const c_char, port: u16, time
                 -3
             }
         },
-        Err(_) => -1,
+        Err(_) => -4,
     }
 }
 
