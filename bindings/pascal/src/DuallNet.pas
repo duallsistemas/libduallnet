@@ -35,6 +35,10 @@ type
 
   EdNet = class(EInvalidOpException);
 
+  { TdConnectionStatus }
+
+  TdConnectionStatus = (csOK, csTimeOut, csCannotConnect);
+
   { dNet }
 
   dNet = packed record
@@ -48,6 +52,8 @@ type
     class function LookupHost(const AHostName: string;
       APreferIPv4: Boolean = True): string; static;
     class function ConnectionHealth(const AIP: string; APort: Word;
+      ATimeout: UInt64 = 3000): TdConnectionStatus; static;
+    class function IsConnectable(const AIP: string; APort: Word;
       ATimeout: UInt64 = 3000): Boolean; static;
     class function NtpRequest(const APool: string = POOL_NTP_ADDR;
       APort: Word = NTP_PORT): TDateTime; static;
@@ -119,7 +125,7 @@ begin
 end;
 
 class function dNet.ConnectionHealth(const AIP: string; APort: Word;
-  ATimeout: UInt64): Boolean;
+  ATimeout: UInt64): TdConnectionStatus;
 var
   M: TMarshaller;
   R: cint;
@@ -128,10 +134,18 @@ begin
   R := libduallnet.dn_connection_health(M.ToCString(AIP), APort, ATimeout);
   case R of
     -1: RaiseInvalidFunctionArgument;
-    -2: Exit(False);
-    -3: RaiseUnknownErrorInFunction('dNet.ConnectionHealth');
+    -2: Result := csTimeOut;
+    -3: Result := csCannotConnect;
+    -4: RaiseUnknownErrorInFunction('dNet.ConnectionHealth');
+  else
+    Result := csOK;
   end;
-  Result := True;
+end;
+
+class function dNet.IsConnectable(const AIP: string; APort: Word;
+  ATimeout: UInt64): Boolean;
+begin
+  Result := dNet.ConnectionHealth(AIP, APort, ATimeout) = csOK;
 end;
 
 class function dNet.NtpRequest(const APool: string; APort: Word): TDateTime;

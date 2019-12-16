@@ -29,8 +29,16 @@ end;
 
 procedure TestConnectionHealth;
 begin
-  Assert(not dNet.ConnectionHealth('1.2.3.4', 1234, 10));
-  Assert(dNet.ConnectionHealth('54.94.220.237', 443));
+  Assert(dNet.ConnectionHealth('127.0.0.1', 1, 10) = csCannotConnect);
+  Assert(dNet.ConnectionHealth('1.2.3.4', 123, 10) = csTimeOut);
+  Assert(dNet.ConnectionHealth('54.94.220.237', 443) = csOK);
+end;
+
+procedure TestIsConnectable;
+begin
+  Assert(not dNet.IsConnectable('127.0.0.1', 1, 10));
+  Assert(not dNet.IsConnectable('1.2.3.4', 123, 10));
+  Assert(dNet.IsConnectable('54.94.220.237', 443));
 end;
 
 procedure TestNtpRequest;
@@ -44,6 +52,7 @@ begin
   TestMACAddress;
   TestLookupHost;
   TestConnectionHealth;
+  TestIsConnectable;
   TestNtpRequest;
   Writeln('All tests passed!');
 {$IFDEF MSWINDOWS}
