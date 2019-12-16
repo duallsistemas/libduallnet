@@ -27,7 +27,7 @@ const
 
 resourcestring
   SInvalidFunctionArgument = 'Invalid function argument.';
-  SUnknownLibraryError = 'Unknown library error.';
+  SUnknownErrorInFunction = 'Unknown error in function: %s.';
 
 type
 
@@ -47,6 +47,8 @@ type
     class function MACAddress: string; static;
     class function LookupHost(const AHostName: string;
       APreferIPv4: Boolean = True): string; static;
+    class function ConnectionHealth(const AIP: string; APort: Word;
+      ATimeout: UInt64 = 3000): Boolean; static;
     class function NtpRequest(const APool: string = POOL_NTP_ADDR;
       APort: Word = NTP_PORT): TDateTime; static;
   end;
@@ -58,9 +60,9 @@ begin
   raise EdNet.Create(SInvalidFunctionArgument);
 end;
 
-procedure RaiseUnknownLibraryError; inline;
+procedure RaiseUnknownErrorInFunction(const AFuncName: string); inline;
 begin
-  raise EdNet.Create(SUnknownLibraryError);
+  raise EdNet.CreateFmt(SUnknownErrorInFunction, [AFuncName]);
 end;
 
 { dNet }
@@ -92,7 +94,7 @@ begin
   case R of
     -1: RaiseInvalidFunctionArgument;
     -2: raise EdNet.Create('No address found.');
-    -3: RaiseUnknownLibraryError;
+    -3: RaiseUnknownErrorInFunction('dNet.MACAddress');
   end;
   Result := TMarshal.ToString(@A[0]);
 end;
@@ -111,9 +113,25 @@ begin
   case R of
     -1: RaiseInvalidFunctionArgument;
     -2: raise EdNet.Create('No MAC address found.');
-    -3: RaiseUnknownLibraryError;
+    -3: RaiseUnknownErrorInFunction('dNet.LookupHost');
   end;
   Result := TMarshal.ToString(@A[0]);
+end;
+
+class function dNet.ConnectionHealth(const AIP: string; APort: Word;
+  ATimeout: UInt64): Boolean;
+var
+  M: TMarshaller;
+  R: cint;
+begin
+  libduallnet.Check;
+  R := libduallnet.dn_connection_health(M.ToCString(AIP), APort, ATimeout);
+  case R of
+    -1: RaiseInvalidFunctionArgument;
+    -2: Exit(False);
+    -3: RaiseUnknownErrorInFunction('dNet.ConnectionHealth');
+  end;
+  Result := True;
 end;
 
 class function dNet.NtpRequest(const APool: string; APort: Word): TDateTime;

@@ -65,8 +65,10 @@ type
   Pcvoid = Pointer;
   Pcchar = MarshaledAString;
   cchar = Byte;
+  cuint16_t = UInt16;
   cint = Int32;
   Pcint = ^Int32;
+  cuint64_t = UInt64;
   csize_t = NativeUInt;
 
   EdnLibNotLoaded = class(EFileNotFoundException);
@@ -78,6 +80,9 @@ var
 
   dn_lookup_host: function(const hostname: Pcchar; prefer_ipv4: Boolean;
     ip: Pcchar; size: csize_t): cint; cdecl;
+
+  dn_connection_health: function(const ip: Pcchar; port: cuint16_t;
+    timeout: cuint64_t): cint; cdecl;
 
   dn_ntp_request: function(const pool: Pcchar; port: cint;
     timestamp: Pcint): cint; cdecl;
@@ -112,6 +117,7 @@ begin
     dn_version := GetProcAddress(GLibHandle, 'dn_version');
     dn_mac_address := GetProcAddress(GLibHandle, 'dn_mac_address');
     dn_lookup_host := GetProcAddress(GLibHandle, 'dn_lookup_host');
+    dn_connection_health := GetProcAddress(GLibHandle, 'dn_connection_health');
     dn_ntp_request := GetProcAddress(GLibHandle, 'dn_ntp_request');
     Result := True;
   finally
@@ -142,6 +148,7 @@ begin
     dn_version := nil;
     dn_mac_address := nil;
     dn_lookup_host := nil;
+    dn_connection_health := nil;
     dn_ntp_request := nil;
   finally
     GCS.Release;

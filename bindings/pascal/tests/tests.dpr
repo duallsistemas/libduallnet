@@ -27,6 +27,12 @@ begin
   Assert(dNet.LookupHost('localhost') = '127.0.0.1');
 end;
 
+procedure TestConnectionHealth;
+begin
+  Assert(not dNet.ConnectionHealth('1.2.3.4', 1234, 10));
+  Assert(dNet.ConnectionHealth('54.94.220.237', 443));
+end;
+
 procedure TestNtpRequest;
 begin
   Assert(dNet.NtpRequest > 0);
@@ -37,6 +43,7 @@ begin
   TestVersion;
   TestMACAddress;
   TestLookupHost;
+  TestConnectionHealth;
   TestNtpRequest;
   Writeln('All tests passed!');
 {$IFDEF MSWINDOWS}
