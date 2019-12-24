@@ -29,7 +29,7 @@ end;
 
 procedure TestConnectionHealth;
 begin
-  Assert(dNet.ConnectionHealth('127.0.0.1', 1, 10) = csCannotConnect);
+  Assert(dNet.ConnectionHealth('127.0.0.1', 1, 0) = csCannotConnect);
   Assert(dNet.ConnectionHealth('1.2.3.4', 123, 10) = csTimeOut);
   Assert(dNet.ConnectionHealth('54.94.220.237', 443) = csOK);
 end;
@@ -47,7 +47,11 @@ begin
 end;
 
 begin
+{$IFDEF MSWINDOWS}
+  dNet.Load(Concat('../../target/i686-pc-windows-msvc/release/', dNet.LIB_NAME));
+{$ELSE}
   dNet.Load(Concat('../../target/release/', dNet.LIB_NAME));
+{$ENDIF}
   TestVersion;
   TestMACAddress;
   TestLookupHost;
