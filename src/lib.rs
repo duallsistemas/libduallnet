@@ -156,6 +156,9 @@ pub unsafe extern "C" fn dn_sntp_request(
     } else {
         result = sntp.get_unix_time_by_addr(from_c_str!(addr).unwrap());
     }
+    if sntp.is_kiss_of_death() {
+        return -3;
+    }
     match result {
         Ok(ts) => {
             *timestamp = ts;
