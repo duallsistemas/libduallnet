@@ -41,9 +41,14 @@ begin
   Assert(dNet.IsConnectable('54.94.220.237', 443));
 end;
 
-procedure TestNtpRequest;
+procedure TestSntpRequest;
+var
+  T1, T2: TDateTime;
 begin
-  Assert(dNet.NtpRequest > 0);
+  T1 := dNet.SntpRequest;
+  Sleep(2000);
+  T2 := dNet.SntpRequest;
+  Assert(T2 > T1);
 end;
 
 begin
@@ -57,7 +62,7 @@ begin
   TestLookupHost;
   TestConnectionHealth;
   TestIsConnectable;
-  TestNtpRequest;
+  TestSntpRequest;
   Writeln('All tests passed!');
 {$IFDEF MSWINDOWS}
   Writeln('Press ENTER to exit ...');

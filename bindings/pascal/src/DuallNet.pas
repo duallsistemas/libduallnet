@@ -20,10 +20,6 @@ uses
 const
   MAC_ADDR_SIZE = 17;
   MAX_IP_SIZE = 45;
-  NTP_TIME_SIZE = 24;
-  POOL_NTP_ADDR = 'pool.ntp.org';
-  GOOGLE_NTP_ADDR = 'time.google.com';
-  NTP_PORT = 123;
 
 resourcestring
   SInvalidFunctionArgument = 'Invalid function argument.';
@@ -55,8 +51,10 @@ type
       ATimeout: UInt64 = 3000): TdConnectionStatus; static;
     class function IsConnectable(const AIP: string; APort: Word;
       ATimeout: UInt64 = 3000): Boolean; static;
-    class function NtpRequest(const APool: string = POOL_NTP_ADDR;
-      APort: Word = NTP_PORT): TDateTime; static;
+    class function SntpRequest(const AAddress: string; ATimeout: UInt64;
+      out ATimestamp: TDateTime): TdConnectionStatus; overload; static;
+    class function SntpRequest(const AAddress: string = '';
+      ATimeout: UInt64 = 0): TDateTime; overload; static;
   end;
 
 implementation
@@ -148,23 +146,34 @@ begin
   Result := dNet.ConnectionHealth(AIP, APort, ATimeout) = csOK;
 end;
 
-class function dNet.NtpRequest(const APool: string; APort: Word): TDateTime;
+class function dNet.SntpRequest(const AAddress: string; ATimeout: UInt64;
+  out ATimestamp: TDateTime): TdConnectionStatus;
 var
   M: TMarshaller;
-  R, TS: cint;
+  TS: cint64_t;
+  R: cint;
 begin
   libduallnet.Check;
-  R := dn_ntp_request(M.ToCString(APool), APort, @TS);
+  R := dn_sntp_request(M.ToCNullableString(AAddress), ATimeout, @TS);
   case R of
     -1: RaiseInvalidFunctionArgument;
-    -2: raise EdNet.Create('NTP error.');
+    -2: Exit(csTimeOut);
+    -3: RaiseUnknownErrorInFunction('dNet.SntpRequest');
   end;
-  Result :=
+  ATimestamp :=
 {$IFDEF FPC}
     UniversalTimeToLocal
 {$ELSE}
     TTimeZone.Local.ToLocalTime
 {$ENDIF}(UnixToDateTime(TS));
+  Result := csOK;
+end;
+
+class function dNet.SntpRequest(const AAddress: string;
+  ATimeout: UInt64): TDateTime; overload; static;
+begin
+  if SntpRequest(AAddress, ATimeout, Result) <> csOK then
+    Result := 0;
 end;
 
 end.

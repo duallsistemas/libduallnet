@@ -69,6 +69,8 @@ type
   cint = Int32;
   Pcint = ^Int32;
   cuint64_t = UInt64;
+  cint64_t = Int64;
+  Pcint64_t = PInt64;
   csize_t = NativeUInt;
 
   EdnLibNotLoaded = class(EFileNotFoundException);
@@ -84,8 +86,8 @@ var
   dn_connection_health: function(const ip: Pcchar; port: cuint16_t;
     timeout: cuint64_t): cint; cdecl;
 
-  dn_ntp_request: function(const pool: Pcchar; port: cint;
-    timestamp: Pcint): cint; cdecl;
+  dn_sntp_request: function(const addr: Pcchar; timeout: cuint64_t;
+    timestamp: Pcint64_t): cint; cdecl;
 
 function TryLoad(const ALibraryName: TFileName): Boolean;
 
@@ -118,7 +120,7 @@ begin
     dn_mac_address := GetProcAddress(GLibHandle, 'dn_mac_address');
     dn_lookup_host := GetProcAddress(GLibHandle, 'dn_lookup_host');
     dn_connection_health := GetProcAddress(GLibHandle, 'dn_connection_health');
-    dn_ntp_request := GetProcAddress(GLibHandle, 'dn_ntp_request');
+    dn_sntp_request := GetProcAddress(GLibHandle, 'dn_sntp_request');
     Result := True;
   finally
     GCS.Release;
@@ -149,7 +151,7 @@ begin
     dn_mac_address := nil;
     dn_lookup_host := nil;
     dn_connection_health := nil;
-    dn_ntp_request := nil;
+    dn_sntp_request := nil;
   finally
     GCS.Release;
   end;
