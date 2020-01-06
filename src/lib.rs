@@ -1,9 +1,11 @@
-use libc::{c_char, c_int, c_uint, size_t};
-use mac_address::get_mac_address;
-use sntpc;
-use std::io::ErrorKind::TimedOut;
+use std::io::{Error, ErrorKind::TimedOut};
 use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
+use std::ptr;
 use std::time::Duration;
+
+use libc::{c_char, c_int, size_t};
+use mac_address::get_mac_address;
+use sntp_request::SntpRequest;
 
 mod utils;
 
@@ -82,8 +84,8 @@ pub unsafe extern "C" fn dn_connection_health(ip: *const c_char, port: u16, time
     match format!("{}:{}", from_c_str!(ip).unwrap(), port).parse::<SocketAddr>() {
         Ok(addr) => match TcpStream::connect_timeout(&addr, Duration::from_millis(timeout)) {
             Ok(_) => 0,
-            Err(e) => {
-                if e.kind() == TimedOut {
+            Err(error) => {
+                if error.kind() == TimedOut {
                     return -2;
                 }
                 -3
@@ -122,41 +124,58 @@ pub unsafe extern "C" fn dn_mac_address(mac_addr: *mut c_char, size: size_t) -> 
     }
 }
 
-/// Requests timestamp from a given NTP server.
+/// Requests timestamp from a given NTP server via SNTP protocol.
 ///
 /// # Arguments
 ///
-/// * `[in] pool` - Server's name or IP address as C-like string.
-/// * `[in] port` - Server's port.
-/// * `[in,out] size` - Returned timestamp.
+/// * `[in] addr` - Server address as C-like string, e.g.: pool.ntp.org:123.
+/// * `[in] timeout` - Time out in milliseconds (default 5000).
+/// * `[in,out] timestamp` - Returned timestamp.
 ///
 /// # Returns
 ///
 /// * `0` - Success.
 /// * `-1` - Invalid argument.
-/// * `-2` - NTP error.
+/// * `-2` - Reached time out.
+/// * `-3` - Unknown error.
 #[no_mangle]
-pub unsafe extern "C" fn dn_ntp_request(
-    pool: *const c_char,
-    port: c_uint,
-    timestamp: *mut c_uint,
+pub unsafe extern "C" fn dn_sntp_request(
+    addr: *const c_char,
+    timeout: u64,
+    timestamp: *mut i64,
 ) -> c_int {
-    if pool.is_null() || port <= 0 || timestamp.is_null() {
+    if timestamp.is_null() {
         return -1;
     }
-    let result = sntpc::request(from_c_str!(pool).unwrap(), port);
+    let sntp = SntpRequest::new();
+    if (timeout > 0) && !sntp.set_timeout(Duration::from_millis(timeout)).is_ok() {
+        return -1;
+    }
+    let result: Result<i64, Error>;
+    if addr.is_null() {
+        result = sntp.get_unix_time();
+    } else {
+        result = sntp.get_unix_time_by_addr(from_c_str!(addr).unwrap());
+    }
     match result {
-        Ok(time) => {
-            *timestamp = time;
+        Ok(ts) => {
+            *timestamp = ts;
             0
         }
-        Err(_) => -2,
+        Err(error) => {
+            if error.kind() == TimedOut {
+                return -2;
+            }
+            -3
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::thread;
+
     #[test]
     fn version() {
         unsafe {
@@ -172,14 +191,14 @@ mod tests {
         unsafe {
             let ip: [c_char; 45] = [0; 45];
             assert_eq!(
-                dn_lookup_host(std::ptr::null(), true, ip.as_ptr() as *mut c_char, ip.len()),
+                dn_lookup_host(ptr::null(), true, ip.as_ptr() as *mut c_char, ip.len()),
                 -1
             );
             assert_eq!(
                 dn_lookup_host(
                     to_c_str!("::1").unwrap().as_ptr(),
                     true,
-                    std::ptr::null_mut(),
+                    ptr::null_mut(),
                     ip.len()
                 ),
                 -1
@@ -252,7 +271,7 @@ mod tests {
     #[test]
     fn connection_health() {
         unsafe {
-            assert_eq!(dn_connection_health(std::ptr::null_mut(), 123, 3000), -1);
+            assert_eq!(dn_connection_health(ptr::null_mut(), 123, 3000), -1);
             assert_eq!(
                 dn_connection_health(to_c_str!("127.0.0.1").unwrap().as_ptr(), 0, 3000),
                 -1
@@ -268,7 +287,7 @@ mod tests {
     fn mac_address() {
         unsafe {
             let mac_addr: [c_char; 18] = [0; 18];
-            assert_eq!(dn_mac_address(std::ptr::null_mut(), mac_addr.len()), -1);
+            assert_eq!(dn_mac_address(ptr::null_mut(), mac_addr.len()), -1);
             assert_eq!(dn_mac_address(mac_addr.as_ptr() as *mut c_char, 0), -1);
 
             dn_mac_address(mac_addr.as_ptr() as *mut c_char, mac_addr.len());
@@ -283,26 +302,26 @@ mod tests {
     }
 
     #[test]
-    fn ntp_request() {
+    fn sntp_request() {
         unsafe {
-            let pool = to_c_str!("pool.ntp.org").unwrap().as_ptr();
-            let mut timestamp: c_uint = 0;
+            let addr = to_c_str!("pool.ntp.org:123").unwrap().as_ptr();
+            let mut ts: i64 = 0;
+            assert_eq!(dn_sntp_request(addr, 0, ptr::null_mut()), -1);
             assert_eq!(
-                dn_ntp_request(std::ptr::null_mut(), 123, &mut timestamp),
-                -1
-            );
-            assert_eq!(dn_ntp_request(pool, 0, &mut timestamp), -1);
-            assert_eq!(dn_ntp_request(pool, 123, std::ptr::null_mut()), -1);
-            assert_eq!(dn_ntp_request(pool, 321, &mut timestamp), -2);
-
-            assert_eq!(
-                dn_ntp_request(
-                    to_c_str!("pool.ntp.org").unwrap().as_ptr(),
-                    123,
-                    &mut timestamp
+                dn_sntp_request(
+                    to_c_str!("pool.ntp.org:321").unwrap().as_ptr(),
+                    100,
+                    &mut ts
                 ),
-                0
+                -3
             );
+
+            let mut ts1: i64 = 0;
+            let mut ts2: i64 = 0;
+            assert_eq!(dn_sntp_request(ptr::null(), 0, &mut ts1), 0);
+            thread::sleep(Duration::from_secs(2));
+            assert_eq!(dn_sntp_request(ptr::null(), 0, &mut ts2), 0);
+            assert!(ts2 > ts1);
         }
     }
 }
