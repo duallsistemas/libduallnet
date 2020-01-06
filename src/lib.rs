@@ -1,10 +1,10 @@
-use std::io::{Error, ErrorKind::TimedOut};
+use std::io::ErrorKind::TimedOut;
 use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
 use std::time::Duration;
 
 use libc::{c_char, c_int, size_t};
 use mac_address::get_mac_address;
-use sntp_request::SntpRequest;
+use sntp_request::{SntpRequest, SntpUnixTimeResult};
 
 mod utils;
 
@@ -150,7 +150,7 @@ pub unsafe extern "C" fn dn_sntp_request(
     if (timeout > 0) && !sntp.set_timeout(Duration::from_millis(timeout)).is_ok() {
         return -1;
     }
-    let result: Result<i64, Error>;
+    let result: SntpUnixTimeResult;
     if addr.is_null() {
         result = sntp.get_unix_time();
     } else {
