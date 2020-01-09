@@ -1,6 +1,14 @@
-use std::io::ErrorKind::TimedOut;
+#[cfg(target_os = "windows")]
+extern crate winapi;
+
+use std::io::{Error, ErrorKind};
 use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
 use std::time::Duration;
+
+#[cfg(target_os = "windows")]
+use winapi::shared::minwindef::DWORD;
+#[cfg(target_os = "windows")]
+use winapi::shared::winerror::{WSAEAFNOSUPPORT, WSAETIMEDOUT};
 
 use libc::{c_char, c_int, size_t};
 use mac_address::get_mac_address;
@@ -84,7 +92,7 @@ pub unsafe extern "C" fn dn_connection_health(ip: *const c_char, port: u16, time
         Ok(addr) => match TcpStream::connect_timeout(&addr, Duration::from_millis(timeout)) {
             Ok(_) => 0,
             Err(error) => {
-                if error.kind() == TimedOut {
+                if error.kind() == ErrorKind::TimedOut {
                     return -2;
                 }
                 -3
@@ -136,7 +144,8 @@ pub unsafe extern "C" fn dn_mac_address(mac_addr: *mut c_char, size: size_t) -> 
 /// * `0` - Success.
 /// * `-1` - Invalid argument.
 /// * `-2` - Reached time out.
-/// * `-3` - Unknown error.
+/// * `-3` - Invalid address or port.
+/// * `-4` - Unknown error.
 #[no_mangle]
 pub unsafe extern "C" fn dn_sntp_request(
     addr: *const c_char,
@@ -165,10 +174,20 @@ pub unsafe extern "C" fn dn_sntp_request(
             0
         }
         Err(error) => {
-            if error.kind() == TimedOut {
-                return -2;
+            if Error::last_os_error().kind() == ErrorKind::InvalidInput {
+                return -3;
             }
-            -3
+            #[cfg(target_os = "windows")]
+            match Error::last_os_error().raw_os_error().unwrap_or(0) as DWORD {
+                WSAETIMEDOUT => return -2,
+                WSAEAFNOSUPPORT => return -3,
+                _ => -4,
+            };
+            match error.kind() {
+                ErrorKind::TimedOut => -2,
+                ErrorKind::InvalidInput => -3,
+                _ => -4,
+            }
         }
     }
 }
@@ -310,19 +329,41 @@ mod tests {
             let mut ts: i64 = 0;
             assert_eq!(dn_sntp_request(addr, 0, std::ptr::null_mut()), -1);
             assert_eq!(
+                dn_sntp_request(to_c_str!("pool.ntp.org").unwrap().as_ptr(), 100, &mut ts),
+                -3
+            );
+            assert_eq!(
+                dn_sntp_request(to_c_str!(":123").unwrap().as_ptr(), 100, &mut ts),
+                -3
+            );
+            assert_eq!(
                 dn_sntp_request(
                     to_c_str!("pool.ntp.org:321").unwrap().as_ptr(),
                     100,
                     &mut ts
                 ),
-                -3
+                if cfg!(target_os = "windows") { -2 } else { -4 }
             );
 
             let mut ts1: i64 = 0;
             let mut ts2: i64 = 0;
-            assert_eq!(dn_sntp_request(std::ptr::null(), 0, &mut ts1), 0);
-            thread::sleep(Duration::from_secs(2));
-            assert_eq!(dn_sntp_request(std::ptr::null(), 0, &mut ts2), 0);
+            assert_eq!(
+                dn_sntp_request(
+                    to_c_str!("time.google.com:123").unwrap().as_ptr(),
+                    0,
+                    &mut ts1
+                ),
+                0
+            );
+            thread::sleep(Duration::from_secs(1));
+            assert_eq!(
+                dn_sntp_request(
+                    to_c_str!("time.cloudflare.com:123").unwrap().as_ptr(),
+                    0,
+                    &mut ts2
+                ),
+                0
+            );
             assert!(ts2 > ts1);
         }
     }
