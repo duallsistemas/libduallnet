@@ -158,7 +158,8 @@ begin
   case R of
     -1: RaiseInvalidFunctionArgument;
     -2: Exit(csTimeOut);
-    -3: RaiseUnknownErrorInFunction('dNet.SntpRequest');
+    -3: raise EdNet.Create('Invalid address or port.');
+    -4: RaiseUnknownErrorInFunction('dNet.SntpRequest');
   end;
   ATimestamp :=
 {$IFDEF FPC}
