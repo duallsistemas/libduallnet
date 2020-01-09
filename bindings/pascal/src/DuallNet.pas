@@ -54,7 +54,7 @@ type
     class function SntpRequest(const AAddress: string; ATimeout: UInt64;
       out ATimestamp: TDateTime): TdConnectionStatus; overload; static;
     class function SntpRequest(const AAddress: string = '';
-      ATimeout: UInt64 = 0): TDateTime; overload; static;
+      ATimeout: UInt64 = 3000): TDateTime; overload; static;
   end;
 
 implementation
@@ -170,7 +170,7 @@ begin
 end;
 
 class function dNet.SntpRequest(const AAddress: string;
-  ATimeout: UInt64): TDateTime; overload; static;
+  ATimeout: UInt64): TDateTime;
 begin
   if SntpRequest(AAddress, ATimeout, Result) <> csOK then
     Result := 0;
