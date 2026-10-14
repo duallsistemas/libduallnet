@@ -1,8 +1,8 @@
 #[cfg(target_os = "windows")]
 extern crate winapi;
 
-use std::io::{Error, ErrorKind};
-use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
+use std::io::ErrorKind;
+use std::net::{IpAddr, SocketAddr, TcpStream, ToSocketAddrs};
 use std::time::Duration;
 
 #[cfg(target_os = "windows")]
@@ -15,6 +15,9 @@ use mac_address::get_mac_address;
 use sntp_request::{SntpRequest, SntpUnixTimeResult};
 
 mod utils;
+
+#[cfg(test)]
+mod regression;
 
 /// Retrieves library version as C-like string.
 #[no_mangle]
@@ -47,9 +50,7 @@ pub unsafe extern "C" fn dn_lookup_host(
     if hostname.is_null() || ip.is_null() || size <= 0 {
         return -1;
     }
-    match vec![from_c_str!(hostname).unwrap(), "0"]
-        .join(":")
-        .to_socket_addrs()
+    match (checked_str!(hostname), 0).to_socket_addrs()
     {
         Ok(addrs) => {
             for addr in addrs {
@@ -88,17 +89,23 @@ pub unsafe extern "C" fn dn_connection_health(ip: *const c_char, port: u16, time
     if ip.is_null() || port <= 0 {
         return -1;
     }
-    match format!("{}:{}", from_c_str!(ip).unwrap(), port).parse::<SocketAddr>() {
-        Ok(addr) => match TcpStream::connect_timeout(&addr, Duration::from_millis(timeout)) {
-            Ok(_) => 0,
-            Err(error) => {
-                if error.kind() == ErrorKind::TimedOut {
-                    return -2;
-                }
-                -3
-            }
+    let ip = checked_str!(ip);
+    // Aceita IPv6 puro ("::1") e o formato com colchetes devolvido por dn_lookup_host.
+    let addr = match ip.parse::<IpAddr>() {
+        Ok(ip) => SocketAddr::new(ip, port),
+        Err(_) => match format!("{}:{}", ip, port).parse::<SocketAddr>() {
+            Ok(addr) => addr,
+            Err(_) => return -4,
         },
-        Err(_) => -4,
+    };
+    match TcpStream::connect_timeout(&addr, Duration::from_millis(timeout)) {
+        Ok(_) => 0,
+        Err(error) => {
+            if error.kind() == ErrorKind::TimedOut {
+                return -2;
+            }
+            -3
+        }
     }
 }
 
@@ -155,6 +162,7 @@ pub unsafe extern "C" fn dn_sntp_request(
     if timestamp.is_null() {
         return -1;
     }
+    *timestamp = 0;
     let sntp = SntpRequest::new();
     if (timeout > 0) && !sntp.set_timeout(Duration::from_millis(timeout)).is_ok() {
         return -1;
@@ -163,7 +171,13 @@ pub unsafe extern "C" fn dn_sntp_request(
     if addr.is_null() {
         result = sntp.get_unix_time();
     } else {
-        result = sntp.get_unix_time_by_addr(from_c_str!(addr).unwrap());
+        // Resolve antes: falha de DNS ou endereco sem porta e -3 de forma deterministica,
+        // sem depender do errno deixado pela libc. send_to usa so o primeiro endereco.
+        let server = match checked_str!(addr).to_socket_addrs().map(|mut addrs| addrs.next()) {
+            Ok(Some(server)) => server,
+            _ => return -3,
+        };
+        result = sntp.get_unix_time_by_addr(server);
     }
     if sntp.is_kiss_of_death() {
         return -3;
@@ -174,17 +188,15 @@ pub unsafe extern "C" fn dn_sntp_request(
             0
         }
         Err(error) => {
-            if Error::last_os_error().kind() == ErrorKind::InvalidInput {
-                return -3;
-            }
             #[cfg(target_os = "windows")]
-            match Error::last_os_error().raw_os_error().unwrap_or(0) as DWORD {
+            match error.raw_os_error().unwrap_or(0) as DWORD {
                 WSAETIMEDOUT => return -2,
                 WSAEAFNOSUPPORT => return -3,
-                _ => -4,
-            };
+                _ => {}
+            }
             match error.kind() {
-                ErrorKind::TimedOut => -2,
+                // Timeout de leitura em socket Unix chega como EAGAIN (WouldBlock).
+                ErrorKind::TimedOut | ErrorKind::WouldBlock => -2,
                 ErrorKind::InvalidInput => -3,
                 _ => -4,
             }
@@ -325,7 +337,8 @@ mod tests {
     #[test]
     fn sntp_request() {
         unsafe {
-            let addr = to_c_str!("pool.ntp.org:123").unwrap().as_ptr();
+            let addr_string = to_c_str!("pool.ntp.org:123").unwrap();
+            let addr = addr_string.as_ptr();
             let mut ts: i64 = 0;
             assert_eq!(dn_sntp_request(addr, 0, std::ptr::null_mut()), -1);
             assert_eq!(
@@ -342,7 +355,7 @@ mod tests {
                     100,
                     &mut ts
                 ),
-                if cfg!(target_os = "windows") { -2 } else { -4 }
+                -2
             );
 
             let mut ts1: i64 = 0;
