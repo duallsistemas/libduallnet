@@ -116,7 +116,7 @@ begin
     @A[0], SizeOf(A));
   case R of
     -1: RaiseInvalidFunctionArgument;
-    -2: raise EdNet.Create('No MAC address found.');
+    -2: raise EdNet.Create('No host address found.');
     -3: RaiseUnknownErrorInFunction('dNet.LookupHost');
   end;
   Result := TMarshal.ToString(@A[0]);

@@ -1,6 +1,6 @@
 [package]
 name = 'duallnet'
-version = '2.0.3'
+version = '2.0.4'
 authors = ['silvioprog <silvioprog@gmail.com>']
 edition = '2018'
 
