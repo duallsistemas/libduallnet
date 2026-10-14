@@ -3,6 +3,7 @@ import argparse
 import hashlib
 import io
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -37,14 +38,24 @@ def main():
                 'rustc': subprocess.check_output(['rustc', '--version'], text=True).strip()}
     binary_name = f'lib{name}.so.{version}' if linux else f'{name}.dll'
     if linux:
-        dynamic = subprocess.check_output(['readelf', '-d', str(binary)], text=True)
+        # readelf traduz rotulos (Name/Flags) conforme o locale; o parsing exige a saida em ingles.
+        readelf_env = dict(os.environ, LC_ALL='C')
+        dynamic = subprocess.check_output(['readelf', '-d', str(binary)], text=True, env=readelf_env)
         soname = f'lib{name}.so.{version.split(".")[0]}'
         if not re.search(r'\(SONAME\).*\[' + re.escape(soname) + r'\]', dynamic):
             raise SystemExit('Unexpected or missing SONAME')
         metadata['soname'] = soname
-        versions = subprocess.check_output(['readelf', '--version-info', str(binary)], text=True)
-        glibc = re.findall(r'GLIBC_(\d+\.\d+(?:\.\d+)?)', versions)
-        metadata['minimum_glibc'] = max(glibc, key=lambda value: tuple(map(int, value.split('.')))) if glibc else None
+        versions = subprocess.check_output(['readelf', '--version-info', str(binary)], text=True, env=readelf_env)
+        # Somente as entradas de .gnu.version_r sem a flag WEAK impedem o carregamento:
+        # versoes WEAK (ex.: pidfd_spawnp do std do Rust) sao opcionais e tem fallback.
+        needs = re.findall(r'Name: GLIBC_(\d+(?:\.\d+)+)\s+Flags: (\S+)', versions)
+        if not needs:
+            raise SystemExit('No GLIBC version requirements found in readelf output')
+        key = lambda value: tuple(map(int, value.split('.')))
+        minimum = max((v for v, flags in needs if 'WEAK' not in flags.split('|')), key=key)
+        optional = [v for v, flags in needs if 'WEAK' in flags.split('|') and key(v) > key(minimum)]
+        metadata['minimum_glibc'] = minimum
+        metadata['optional_glibc'] = max(optional, key=key) if optional else None
     files = {binary_name: payload, 'BUILD.json': (json.dumps(metadata, indent=2) + '\n').encode()}
     for filename in ('README.md', 'LICENSE', 'Cargo.lock'):
         files[filename] = (root / filename).read_bytes()
