@@ -1,7 +1,7 @@
 #[cfg(target_os = "windows")]
 extern crate winapi;
 
-use std::io::{Error, ErrorKind};
+use std::io::ErrorKind;
 use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
 use std::time::Duration;
 
@@ -15,6 +15,9 @@ use mac_address::get_mac_address;
 use sntp_request::{SntpRequest, SntpUnixTimeResult};
 
 mod utils;
+
+#[cfg(test)]
+mod regression;
 
 /// Retrieves library version as C-like string.
 #[no_mangle]
@@ -47,9 +50,7 @@ pub unsafe extern "C" fn dn_lookup_host(
     if hostname.is_null() || ip.is_null() || size <= 0 {
         return -1;
     }
-    match vec![from_c_str!(hostname).unwrap(), "0"]
-        .join(":")
-        .to_socket_addrs()
+    match (checked_str!(hostname), 0).to_socket_addrs()
     {
         Ok(addrs) => {
             for addr in addrs {
@@ -88,7 +89,7 @@ pub unsafe extern "C" fn dn_connection_health(ip: *const c_char, port: u16, time
     if ip.is_null() || port <= 0 {
         return -1;
     }
-    match format!("{}:{}", from_c_str!(ip).unwrap(), port).parse::<SocketAddr>() {
+    match format!("{}:{}", checked_str!(ip), port).parse::<SocketAddr>() {
         Ok(addr) => match TcpStream::connect_timeout(&addr, Duration::from_millis(timeout)) {
             Ok(_) => 0,
             Err(error) => {
@@ -155,6 +156,7 @@ pub unsafe extern "C" fn dn_sntp_request(
     if timestamp.is_null() {
         return -1;
     }
+    *timestamp = 0;
     let sntp = SntpRequest::new();
     if (timeout > 0) && !sntp.set_timeout(Duration::from_millis(timeout)).is_ok() {
         return -1;
@@ -163,7 +165,7 @@ pub unsafe extern "C" fn dn_sntp_request(
     if addr.is_null() {
         result = sntp.get_unix_time();
     } else {
-        result = sntp.get_unix_time_by_addr(from_c_str!(addr).unwrap());
+        result = sntp.get_unix_time_by_addr(checked_str!(addr));
     }
     if sntp.is_kiss_of_death() {
         return -3;
@@ -174,11 +176,11 @@ pub unsafe extern "C" fn dn_sntp_request(
             0
         }
         Err(error) => {
-            if Error::last_os_error().kind() == ErrorKind::InvalidInput {
+            if error.kind() == ErrorKind::InvalidInput {
                 return -3;
             }
             #[cfg(target_os = "windows")]
-            match Error::last_os_error().raw_os_error().unwrap_or(0) as DWORD {
+            match error.raw_os_error().unwrap_or(0) as DWORD {
                 WSAETIMEDOUT => return -2,
                 WSAEAFNOSUPPORT => return -3,
                 _ => -4,
@@ -325,7 +327,8 @@ mod tests {
     #[test]
     fn sntp_request() {
         unsafe {
-            let addr = to_c_str!("pool.ntp.org:123").unwrap().as_ptr();
+            let addr_string = to_c_str!("pool.ntp.org:123").unwrap();
+            let addr = addr_string.as_ptr();
             let mut ts: i64 = 0;
             assert_eq!(dn_sntp_request(addr, 0, std::ptr::null_mut()), -1);
             assert_eq!(

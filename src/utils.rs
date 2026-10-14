@@ -39,11 +39,14 @@ macro_rules! copy {
 macro_rules! copy_c_str {
     ($src:expr,$dest:expr,$size:expr) => {
         let buf = $src.to_bytes_with_nul();
-        let mut buf_size = $size;
-        if buf_size > buf.len() {
-            buf_size = buf.len()
+        // Falha fechado: nunca entregar string truncada sem terminador NUL.
+        if $size < buf.len() {
+            if $size > 0 {
+                *$dest = 0;
+            }
+            return -1;
         }
-        copy!(buf.as_ptr(), $dest, buf_size);
+        copy!(buf.as_ptr(), $dest, buf.len());
     };
 }
 
@@ -60,5 +63,17 @@ macro_rules! compare {
 macro_rules! length {
     ($cstr:expr) => {
         libc::strlen($cstr)
+    };
+}
+
+/// Valida UTF-8 antes de atravessar a interface C; ponteiro valido e NUL sao pre-condicoes.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! checked_str {
+    ($value:expr) => {
+        match from_c_str!($value) {
+            Ok(value) => value,
+            Err(_) => return -1,
+        }
     };
 }
