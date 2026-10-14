@@ -9,7 +9,10 @@ Output buffers must be writable and have enough capacity for the full result
 including its NUL terminator. Invalid UTF-8 and insufficient capacity return
 `-1`. An undersized nonempty buffer receives an empty string; results are never
 silently truncated. Export names and Pascal binding signatures are unchanged.
-SNTP failures reset the timestamp and are classified using the returned I/O error.
+SNTP failures reset the timestamp. The server address is resolved first, so a
+DNS failure or an address without port returns `-3`; a read timeout returns `-2`
+on every platform (Unix reports it as `EAGAIN`). `dn_connection_health` accepts
+bare (`::1`) and bracketed (`[::1]`) IPv6 addresses.
 
 Focused regression tests use only local fixtures:
 
@@ -34,7 +37,7 @@ python3 scripts/package_release.py --target x86_64-unknown-linux-gnu
 
 On Windows, use `x86_64-pc-windows-msvc` and set
 `RUSTFLAGS=-Ctarget-feature=+crt-static` before building. Packages in `dist/`
-include bindings, license, the resolved Cargo.lock, BUILD.json and SHA256SUMS;
+include bindings, license, the committed Cargo.lock, BUILD.json and SHA256SUMS;
 each archive has its own `.sha256`. BUILD.json records source revision, dirty
 state, toolchain and, on Linux, SONAME and minimum required glibc. A Linux build
 from a newer distribution may require newer glibc on the deployment machine.

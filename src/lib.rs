@@ -2,7 +2,7 @@
 extern crate winapi;
 
 use std::io::ErrorKind;
-use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
+use std::net::{IpAddr, SocketAddr, TcpStream, ToSocketAddrs};
 use std::time::Duration;
 
 #[cfg(target_os = "windows")]
@@ -89,17 +89,23 @@ pub unsafe extern "C" fn dn_connection_health(ip: *const c_char, port: u16, time
     if ip.is_null() || port <= 0 {
         return -1;
     }
-    match format!("{}:{}", checked_str!(ip), port).parse::<SocketAddr>() {
-        Ok(addr) => match TcpStream::connect_timeout(&addr, Duration::from_millis(timeout)) {
-            Ok(_) => 0,
-            Err(error) => {
-                if error.kind() == ErrorKind::TimedOut {
-                    return -2;
-                }
-                -3
-            }
+    let ip = checked_str!(ip);
+    // Aceita IPv6 puro ("::1") e o formato com colchetes devolvido por dn_lookup_host.
+    let addr = match ip.parse::<IpAddr>() {
+        Ok(ip) => SocketAddr::new(ip, port),
+        Err(_) => match format!("{}:{}", ip, port).parse::<SocketAddr>() {
+            Ok(addr) => addr,
+            Err(_) => return -4,
         },
-        Err(_) => -4,
+    };
+    match TcpStream::connect_timeout(&addr, Duration::from_millis(timeout)) {
+        Ok(_) => 0,
+        Err(error) => {
+            if error.kind() == ErrorKind::TimedOut {
+                return -2;
+            }
+            -3
+        }
     }
 }
 
@@ -165,7 +171,13 @@ pub unsafe extern "C" fn dn_sntp_request(
     if addr.is_null() {
         result = sntp.get_unix_time();
     } else {
-        result = sntp.get_unix_time_by_addr(checked_str!(addr));
+        // Resolve antes: falha de DNS ou endereco sem porta e -3 de forma deterministica,
+        // sem depender do errno deixado pela libc. send_to usa so o primeiro endereco.
+        let server = match checked_str!(addr).to_socket_addrs().map(|mut addrs| addrs.next()) {
+            Ok(Some(server)) => server,
+            _ => return -3,
+        };
+        result = sntp.get_unix_time_by_addr(server);
     }
     if sntp.is_kiss_of_death() {
         return -3;
@@ -176,17 +188,15 @@ pub unsafe extern "C" fn dn_sntp_request(
             0
         }
         Err(error) => {
-            if error.kind() == ErrorKind::InvalidInput {
-                return -3;
-            }
             #[cfg(target_os = "windows")]
             match error.raw_os_error().unwrap_or(0) as DWORD {
                 WSAETIMEDOUT => return -2,
                 WSAEAFNOSUPPORT => return -3,
-                _ => -4,
-            };
+                _ => {}
+            }
             match error.kind() {
-                ErrorKind::TimedOut => -2,
+                // Timeout de leitura em socket Unix chega como EAGAIN (WouldBlock).
+                ErrorKind::TimedOut | ErrorKind::WouldBlock => -2,
                 ErrorKind::InvalidInput => -3,
                 _ => -4,
             }
@@ -345,7 +355,7 @@ mod tests {
                     100,
                     &mut ts
                 ),
-                if cfg!(target_os = "windows") { -2 } else { -4 }
+                -2
             );
 
             let mut ts1: i64 = 0;

@@ -15,6 +15,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--target', required=True, choices=[
         'x86_64-pc-windows-msvc', 'x86_64-unknown-linux-gnu'])
+    parser.add_argument('--allow-dirty', action='store_true',
+                        help='package a build from uncommitted sources (never for releases)')
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
     package = tomllib.loads((root / 'Cargo.toml').read_text(encoding='utf-8'))['package']
@@ -24,6 +26,12 @@ def main():
     payload = binary.read_bytes()
     revision = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root, text=True).strip()
     dirty = bool(subprocess.check_output(['git', 'status', '--porcelain'], cwd=root, text=True).strip())
+    if dirty and not args.allow_dirty:
+        raise SystemExit('Working tree is dirty; commit first or pass --allow-dirty')
+    # Sem Cargo.lock versionado, 'revision' nao identifica as dependencias empacotadas.
+    if subprocess.run(['git', 'ls-files', '--error-unmatch', 'Cargo.lock'], cwd=root,
+                      capture_output=True).returncode != 0:
+        raise SystemExit('Cargo.lock must be committed')
     metadata = {'package': name, 'version': version, 'target': args.target,
                 'revision': revision, 'dirty': dirty,
                 'rustc': subprocess.check_output(['rustc', '--version'], text=True).strip()}
