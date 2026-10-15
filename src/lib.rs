@@ -12,7 +12,7 @@ use winapi::shared::winerror::{WSAEAFNOSUPPORT, WSAETIMEDOUT};
 
 use libc::{c_char, c_int, size_t};
 use mac_address::get_mac_address;
-use sntp_request::{SntpRequest, SntpUnixTimeResult};
+use sntp_request::SntpRequest;
 
 mod utils;
 
@@ -47,7 +47,7 @@ pub unsafe extern "C" fn dn_lookup_host(
     ip: *mut c_char,
     size: size_t,
 ) -> c_int {
-    if hostname.is_null() || ip.is_null() || size <= 0 {
+    if hostname.is_null() || ip.is_null() || size == 0 {
         return -1;
     }
     match (checked_str!(hostname), 0).to_socket_addrs()
@@ -86,7 +86,7 @@ pub unsafe extern "C" fn dn_lookup_host(
 /// * `-4` - Unknown error.
 #[no_mangle]
 pub unsafe extern "C" fn dn_connection_health(ip: *const c_char, port: u16, timeout: u64) -> c_int {
-    if ip.is_null() || port <= 0 {
+    if ip.is_null() || port == 0 {
         return -1;
     }
     let ip = checked_str!(ip);
@@ -124,7 +124,7 @@ pub unsafe extern "C" fn dn_connection_health(ip: *const c_char, port: u16, time
 /// * `-3` - Unknown error.
 #[no_mangle]
 pub unsafe extern "C" fn dn_mac_address(mac_addr: *mut c_char, size: size_t) -> c_int {
-    if mac_addr.is_null() || size <= 0 {
+    if mac_addr.is_null() || size == 0 {
         return -1;
     }
     match get_mac_address() {
@@ -164,12 +164,11 @@ pub unsafe extern "C" fn dn_sntp_request(
     }
     *timestamp = 0;
     let sntp = SntpRequest::new();
-    if (timeout > 0) && !sntp.set_timeout(Duration::from_millis(timeout)).is_ok() {
+    if (timeout > 0) && sntp.set_timeout(Duration::from_millis(timeout)).is_err() {
         return -1;
     }
-    let result: SntpUnixTimeResult;
-    if addr.is_null() {
-        result = sntp.get_unix_time();
+    let result = if addr.is_null() {
+        sntp.get_unix_time()
     } else {
         // Resolve antes: falha de DNS ou endereco sem porta e -3 de forma deterministica,
         // sem depender do errno deixado pela libc. send_to usa so o primeiro endereco.
@@ -177,8 +176,8 @@ pub unsafe extern "C" fn dn_sntp_request(
             Ok(Some(server)) => server,
             _ => return -3,
         };
-        result = sntp.get_unix_time_by_addr(server);
-    }
+        sntp.get_unix_time_by_addr(server)
+    };
     if sntp.is_kiss_of_death() {
         return -3;
     }
@@ -220,6 +219,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "requires external network/specific DNS resolver"]
     fn lookup_host() {
         unsafe {
             let ip: [c_char; 45] = [0; 45];
@@ -302,6 +302,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "requires external network endpoint"]
     fn connection_health() {
         unsafe {
             assert_eq!(dn_connection_health(std::ptr::null_mut(), 123, 3000), -1);
@@ -335,6 +336,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "requires external NTP network access"]
     fn sntp_request() {
         unsafe {
             let addr_string = to_c_str!("pool.ntp.org:123").unwrap();
